@@ -1,0 +1,5 @@
+# Cross-platform safety: the shell hook and the Node CLI shebang must keep LF
+# endings or they fail to execute on macOS/Linux (CRLF breaks `#!` resolution
+# and emits `\r: command not found`). Force LF regardless of the cloning machine.
+*.sh        text eol=lf
+bin/cli.js  text eol=lf
