@@ -1,0 +1,33 @@
+{
+  "name": "cairn",
+  "version": "0.1.0",
+  "description": "Cairn — doc-first, subagent-driven engineering workflow for Claude Code. Layered on the agent-skills library + an SDD execution engine + a documentation/learnings persistence layer.",
+  "type": "module",
+  "bin": {
+    "cairn": "bin/cli.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    ".claude/commands/",
+    "agents/",
+    "skills/",
+    "hooks/",
+    "templates/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "claude-code",
+    "agent-skills",
+    "subagent-driven-development",
+    "spec-driven-development",
+    "ai-engineering"
+  ],
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  }
+}

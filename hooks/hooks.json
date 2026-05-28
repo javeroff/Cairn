@@ -1,11 +1,12 @@
 {
   "hooks": {
-    "SessionStart": [
+    "PreToolUse": [
       {
+        "matcher": "Write|Edit|NotebookEdit",
         "hooks": [
           {
             "type": "command",
-            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/session-start.sh"
+            "command": "bash ${CLAUDE_PLUGIN_ROOT}/hooks/branch-guard.sh"
           }
         ]
       }

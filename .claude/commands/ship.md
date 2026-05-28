@@ -1,72 +1,58 @@
 ---
-description: Run the pre-launch checklist via parallel fan-out to specialist personas, then synthesize a go/no-go decision
+description: End-of-milestone deploy checkpoint. The final gate before deploying — runs the Ship-phase skills as serial gates, then a parallel three-persona review, and emits one go/no-go verdict. Not a per-feature step.
+argument-hint: [milestone or feature ids being shipped]
 ---
 
-Invoke the agent-skills:shipping-and-launch skill.
+# /ship — Milestone Deploy Checkpoint
 
-`/ship` is a **fan-out orchestrator**. It runs three specialist personas in parallel against the current change, then merges their reports into a single go/no-go decision with a rollback plan. The personas operate independently — no shared state, no ordering — which is what makes parallel execution safe and useful here.
+You are running Cairn's **ship** phase. This is the final checkpoint before a milestone deploys — not something run per feature. It composes the existing Ship-phase skills as ordered gates, then fans out three specialist personas in parallel, and synthesizes a single deploy decision.
 
-## Phase A — Parallel fan-out
+## Inputs
+- `$ARGUMENTS` — the milestone name or the feature ids being shipped. If empty, ship the current branch's completed features.
 
-Spawn three subagents concurrently using the Agent tool. **Issue all three Agent tool calls in a single assistant turn so they execute in parallel** — sequential calls defeat the purpose of this command.
+## Step 0 — Scope & branch
+1. Confirm not on `main`/`master` (Branch Guard enforces this for writes). Shipping merges *into* main; you prepare from the feature/milestone branch.
+2. Identify the features in scope: those with `status: complete` (or the ids passed in). List them.
 
-In Claude Code, each call passes `subagent_type` matching the persona's `name` field:
+## Step 1 — Serial gates (each must pass before the next)
+Compose the existing Ship-phase skills **in order**. A failing gate stops the ship.
 
-1. **`code-reviewer`** — Run a five-axis review (correctness, readability, architecture, security, performance) on the staged changes or recent commits. Output the standard review template.
-2. **`security-auditor`** — Run a vulnerability and threat-model pass. Check OWASP Top 10, secrets handling, auth/authz, dependency CVEs. Output the standard audit report.
-3. **`test-engineer`** — Analyze test coverage for the change. Identify gaps in happy path, edge cases, error paths, and concurrency scenarios. Output the standard coverage analysis.
+1. **`git-workflow-and-versioning`** — clean history, conventional commits, version bump appropriate to the change (semver), changelog updated. This skill applies on any code change — it always runs.
+2. **`ci-cd-and-automation`** — the pipeline is green: tests, lint, typecheck, build all pass in CI, not just locally. If there's no CI, flag it and run the equivalents locally.
+3. **`documentation-and-adrs`** — public-facing docs reflect the shipped features; any architecturally significant decision in this milestone has an ADR.
+4. **`deprecation-and-migration`** — *only if* anything was deprecated or requires a migration. Confirm migration steps and dependent-feature flags (cross-check `depends_on` in the shipped docs).
+5. **`shipping-and-launch`** — the launch checklist: rollback plan, feature flags for risky changes, monitoring/alerts in place, canary strategy if applicable.
 
-In other harnesses without an Agent tool, invoke each persona's system prompt sequentially and treat their outputs as if returned in parallel — the merge phase still works.
+## Step 2 — Parallel persona fan-out
+With the gates green, dispatch the three specialist personas **concurrently** (fresh subagents) against the full milestone diff:
+- **`code-reviewer`** — five-axis review across the milestone (not per-task; the integrated whole).
+- **`security-auditor`** — vulnerability scan of the shipped surface (auth, input handling, secrets, dependencies).
+- **`test-engineer`** — coverage and test-strategy adequacy for what's shipping.
 
-Constraints (from Claude Code's subagent model):
-- Subagents cannot spawn other subagents — do not let one persona delegate to another.
-- Each subagent gets its own context window and returns only its report to this main session.
-- If you need teammates that talk to each other instead of just reporting back, use Claude Code Agent Teams and reference these personas as teammate types (see `references/orchestration-patterns.md`).
+Each returns findings by severity. This is the one endorsed multi-persona orchestration — they run in parallel and do not invoke each other.
 
-**Persona resolution.** If you've defined your own `code-reviewer`, `security-auditor`, or `test-engineer` in `.claude/agents/` or `~/.claude/agents/`, those take precedence over this plugin's versions — `/ship` picks up your customizations automatically. This is intentional: plugin subagents sit at the bottom of Claude Code's scope priority table, so user-level definitions win by design.
+## Step 3 — Synthesize the verdict
+Merge the gate results and the three persona reports into a single decision:
 
-## Phase B — Merge in main context
+```
+🚢 SHIP CHECKPOINT — <milestone>
+   Features: <ids>
 
-Once all three reports are back, the main agent (not a sub-persona) synthesizes them:
+   Gates:   git ✅ | ci ✅ | docs ✅ | migration n/a | launch ✅
+   Reviews: code-reviewer <P1:0 P2:1> | security <P1:0> | test <coverage 84%>
 
-1. **Code Quality** — Aggregate Critical/Important findings from `code-reviewer` and any failing tests, lint, or build output. Resolve duplicates between reviewers.
-2. **Security** — Promote any Critical/High `security-auditor` findings to launch blockers. Cross-reference with `code-reviewer`'s security axis.
-3. **Performance** — Pull from `code-reviewer`'s performance axis; cross-check Core Web Vitals if applicable.
-4. **Accessibility** — Verify keyboard nav, screen reader support, contrast (not covered by the three personas — handle directly here, or invoke the accessibility checklist).
-5. **Infrastructure** — Env vars, migrations, monitoring, feature flags. Verify directly.
-6. **Documentation** — README, ADRs, changelog. Verify directly.
-
-## Phase C — Decision and rollback
-
-Produce a single output:
-
-```markdown
-## Ship Decision: GO | NO-GO
-
-### Blockers (must fix before ship)
-- [Source persona: Critical finding + file:line]
-
-### Recommended fixes (should fix before ship)
-- [Source persona: Important finding + file:line]
-
-### Acknowledged risks (shipping anyway)
-- [Risk + mitigation]
-
-### Rollback plan
-- Trigger conditions: [what signals would prompt rollback]
-- Rollback procedure: [exact steps]
-- Recovery time objective: [target]
-
-### Specialist reports (full)
-- [code-reviewer report]
-- [security-auditor report]
-- [test-engineer report]
+   VERDICT: GO | NO-GO
+   Blocking: <list any P1/critical findings or failed gates>
+   Recommended before deploy: <non-blocking but advised>
 ```
 
-## Rules
+`NO-GO` if any gate failed or any persona returned a P1/critical finding. Otherwise `GO`.
 
-1. The three Phase A personas run in parallel — never sequentially.
-2. Personas do not call each other. The main agent merges in Phase B.
-3. The rollback plan is mandatory before any GO decision.
-4. If any persona returns a Critical finding, the default verdict is NO-GO unless the user explicitly accepts the risk.
-5. **Skip the fan-out only if all of the following are true:** the change touches 2 files or fewer, the diff is under 50 lines, and it does not touch auth, payments, data access, or config/env. Otherwise, default to fan-out. `/ship` is designed for production-bound changes — when the blast radius is non-trivial, run the parallel review even if the diff looks small.
+## Step 4 — On GO
+Update shipped docs to `status: complete` (if not already) and `phase: ship`. Offer: merge to main / open PR / hold. After merge, suggest `/digest` on the shipped features to capture milestone learnings, and `/status` to refresh `.cairn/.startup.md`.
+
+## Anti-rationalization
+- "Tests pass locally, skip CI" → local ≠ CI. Environment drift is exactly what ship-time CI catches. Run the gate.
+- "Security review for a small milestone is overkill" → the persona fan-out is cheap (parallel) and ship is the last gate before users. Run all three.
+- "One P2 finding, ship anyway" → P2 is non-blocking; record it as recommended-before-deploy and proceed. But never wave through a P1 — that's what NO-GO is for.
+- "Ship each feature as it finishes" → no. Ship is milestone-level. Per-feature completion is `/build` + `/digest`; `/ship` gates the integrated whole.

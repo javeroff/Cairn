@@ -1,186 +1,80 @@
 ---
 name: using-agent-skills
-description: Discovers and invokes agent skills. Use when starting a session or when you need to discover which skill applies to the current task. This is the meta-skill that governs how all other skills are discovered and invoked.
+description: The Cairn workflow discovery map. Loaded at /spec entry (not session start). Maps incoming work to the right command and skill across the full lifecycle, and defines shared operating rules. Read this first when entering the build workflow or deciding which skill applies.
 ---
 
-# Using Agent Skills
+# Using Cairn
 
-## Overview
+Cairn = agent-skills (the skill library) + subagent-driven development (the execution engine) + doc-first persistence + a learnings loop. This skill is the map: it routes work to the right command and skill. It loads at **`/spec` entry** — not at session start — so the workflow machinery is present when you're building and absent when you're not.
 
-Agent Skills is a collection of engineering workflow skills organized by development phase. Each skill encodes a specific process that senior engineers follow. This meta-skill helps you discover and apply the right skill for your current task.
-
-## Skill Discovery
-
-When a task arrives, identify the development phase and apply the corresponding skill:
+## The lifecycle (commands)
 
 ```
-Task arrives
-    │
-    ├── Don't know what you want yet? ──────→ interview-me
-    ├── Have a rough concept, need variants? → idea-refine
-    ├── New project/feature/change? ──→ spec-driven-development
-    ├── Have a spec, need tasks? ──────→ planning-and-task-breakdown
-    ├── Implementing code? ────────────→ incremental-implementation
-    │   ├── UI work? ─────────────────→ frontend-ui-engineering
-    │   ├── API work? ────────────────→ api-and-interface-design
-    │   ├── Need better context? ─────→ context-engineering
-    │   ├── Need doc-verified code? ───→ source-driven-development
-    │   └── Stakes high / unfamiliar code? ──→ doubt-driven-development
-    ├── Writing/running tests? ────────→ test-driven-development
-    │   └── Browser-based? ───────────→ browser-testing-with-devtools
-    ├── Something broke? ──────────────→ debugging-and-error-recovery
-    ├── Reviewing code? ───────────────→ code-review-and-quality
-    │   ├── Too complex? ─────────────→ code-simplification
-    │   ├── Security concerns? ───────→ security-and-hardening
-    │   └── Performance concerns? ────→ performance-optimization
-    ├── Committing/branching? ─────────→ git-workflow-and-versioning
-    ├── CI/CD pipeline work? ──────────→ ci-cd-and-automation
-    ├── Deprecating/migrating? ────────→ deprecation-and-migration
-    ├── Writing docs/ADRs? ───────────→ documentation-and-adrs
-    └── Deploying/launching? ─────────→ shipping-and-launch
+/spec  →  /plan  →  /build  →  /test  →  /review  →  [/code-simplify]  →  /ship
+                                                                          │
+                          /digest (after build or ship)   /status (anytime)
 ```
 
-## Core Operating Behaviors
+| Command | Phase | What it does |
+|---|---|---|
+| `/spec` | Define | Writes the one source-of-truth doc to `.cairn/docs/NN.md` (opt-in). Composes interview-me, idea-refine, spec-driven-development. Reads `.cairn/learnings.md` + `.startup.md` at entry. |
+| `/plan` | Plan | Decomposes the doc into subagent-ownable tasks with a file-declaration gate and complexity signal → `.cairn/plans/NN.md`. |
+| `/build` | Build | SDD dispatcher: fresh subagent per task on the cheapest capable model, green gate (5x → debugging), light per-task compliance sanity, then hands off to `/review`. |
+| `/test` | Verify | Holistic verification — full suite + browser testing. Reused from base as-is. |
+| `/review` | Review | Spec-compliance (Axis 0, when a doc exists) → quality → security → performance. The home of review. Runs standalone too. |
+| `/code-simplify` | Review | Optional. Run on the milestone before ship. Reused from base as-is. |
+| `/ship` | Ship | Milestone deploy checkpoint: serial Ship gates → parallel persona fan-out → go/no-go verdict. |
+| `/digest` | Learn | Extracts durable rules from completed work into `.cairn/learnings.md`; 3x recurrence promotes. |
+| `/status` | Orient | Rebuilds `.cairn/.startup.md` (project snapshot + promoted durable rules). |
 
-These behaviors apply at all times, across all skills. They are non-negotiable.
+## Skill discovery flowchart
 
-### 1. Surface Assumptions
-
-Before implementing anything non-trivial, explicitly state your assumptions:
-
-```
-ASSUMPTIONS I'M MAKING:
-1. [assumption about requirements]
-2. [assumption about architecture]
-3. [assumption about scope]
-→ Correct me now or I'll proceed with these.
-```
-
-Don't silently fill in ambiguous requirements. The most common failure mode is making wrong assumptions and running with them unchecked. Surface uncertainty early — it's cheaper than rework.
-
-### 2. Manage Confusion Actively
-
-When you encounter inconsistencies, conflicting requirements, or unclear specifications:
-
-1. **STOP.** Do not proceed with a guess.
-2. Name the specific confusion.
-3. Present the tradeoff or ask the clarifying question.
-4. Wait for resolution before continuing.
-
-**Bad:** Silently picking one interpretation and hoping it's right.
-**Good:** "I see X in the spec but Y in the existing code. Which takes precedence?"
-
-### 3. Push Back When Warranted
-
-You are not a yes-machine. When an approach has clear problems:
-
-- Point out the issue directly
-- Explain the concrete downside (quantify when possible — "this adds ~200ms latency" not "this might be slower")
-- Propose an alternative
-- Accept the human's decision if they override with full information
-
-Sycophancy is a failure mode. "Of course!" followed by implementing a bad idea helps no one. Honest technical disagreement is more valuable than false agreement.
-
-### 4. Enforce Simplicity
-
-Your natural tendency is to overcomplicate. Actively resist it.
-
-Before finishing any implementation, ask:
-- Can this be done in fewer lines?
-- Are these abstractions earning their complexity?
-- Would a staff engineer look at this and say "why didn't you just..."?
-
-If you build 1000 lines and 100 would suffice, you have failed. Prefer the boring, obvious solution. Cleverness is expensive.
-
-### 5. Maintain Scope Discipline
-
-Touch only what you're asked to touch.
-
-Do NOT:
-- Remove comments you don't understand
-- "Clean up" code orthogonal to the task
-- Refactor adjacent systems as a side effect
-- Delete code that seems unused without explicit approval
-- Add features not in the spec because they "seem useful"
-
-Your job is surgical precision, not unsolicited renovation.
-
-### 6. Verify, Don't Assume
-
-Every skill includes a verification step. A task is not complete until verification passes. "Seems right" is never sufficient — there must be evidence (passing tests, build output, runtime data).
-
-## Failure Modes to Avoid
-
-These are the subtle errors that look like productivity but create problems:
-
-1. Making wrong assumptions without checking
-2. Not managing your own confusion — plowing ahead when lost
-3. Not surfacing inconsistencies you notice
-4. Not presenting tradeoffs on non-obvious decisions
-5. Being sycophantic ("Of course!") to approaches with clear problems
-6. Overcomplicating code and APIs
-7. Modifying code or comments orthogonal to the task
-8. Removing things you don't fully understand
-9. Building without a spec because "it's obvious"
-10. Skipping verification because "it looks right"
-
-## Skill Rules
-
-1. **Check for an applicable skill before starting work.** Skills encode processes that prevent common mistakes.
-
-2. **Skills are workflows, not suggestions.** Follow the steps in order. Don't skip verification steps.
-
-3. **Multiple skills can apply.** A feature implementation might involve `idea-refine` → `spec-driven-development` → `planning-and-task-breakdown` → `incremental-implementation` → `test-driven-development` → `code-review-and-quality` → `code-simplification` → `shipping-and-launch` in sequence.
-
-4. **When in doubt, start with a spec.** If the task is non-trivial and there's no spec, begin with `spec-driven-development`.
-
-## Lifecycle Sequence
-
-For a complete feature, the typical skill sequence is:
+Not every task needs every skill. Match intent to skill:
 
 ```
-1.  interview-me                → Extract what the user actually wants
-2.  idea-refine                 → Refine vague ideas
-3.  spec-driven-development     → Define what we're building
-4.  planning-and-task-breakdown → Break into verifiable chunks
-5.  context-engineering         → Load the right context
-6.  source-driven-development   → Verify against official docs
-7.  incremental-implementation  → Build slice by slice
-8.  doubt-driven-development    → Cross-examine non-trivial decisions in-flight
-9.  test-driven-development     → Prove each slice works
-10. code-review-and-quality     → Review before merge
-11. code-simplification         → Reduce unnecessary complexity while preserving behavior
-12. git-workflow-and-versioning → Clean commit history
-13. documentation-and-adrs      → Document decisions
-14. deprecation-and-migration   → Retire old systems and move users safely when needed
-15. shipping-and-launch         → Deploy safely
+What are you doing?
+├── Clarifying an underspecified ask? ──────→ interview-me
+├── Exploring a rough idea? ────────────────→ idea-refine
+├── Defining a feature/project? ────────────→ spec-driven-development  (via /spec → writes the doc)
+├── Breaking a spec into tasks? ────────────→ planning-and-task-breakdown  (via /plan)
+├── Building a feature? ────────────────────→ incremental-implementation  (via /build)
+│   ├── UI work? ────────────────────────────→ frontend-ui-engineering
+│   ├── API / interface work? ───────────────→ api-and-interface-design
+│   ├── Need the right context loaded? ──────→ context-engineering          (build composes at entry)
+│   ├── Framework code from memory? ─────────→ source-driven-development     (build composes when stack-specific)
+│   └── High stakes / unfamiliar / irreversible? → doubt-driven-development  (build composes on novel-tier tasks)
+├── Writing or running tests? ──────────────→ test-driven-development  (via /build per task, /test holistic)
+│   └── Browser-based? ──────────────────────→ browser-testing-with-devtools
+├── Something broke (5x green-gate fail)? ──→ debugging-and-error-recovery  (build dispatches on 5x)
+├── Reviewing before merge? ────────────────→ /review:
+│   ├── Does it match the doc? ──────────────→ spec-compliance-review   (Axis 0)
+│   ├── Is it well written? ─────────────────→ code-review-and-quality  (Axis 1)
+│   ├── Security concerns? ──────────────────→ security-and-hardening   (Axis 2)
+│   └── Performance concerns? ───────────────→ performance-optimization (Axis 3)
+├── Code works but is hard to read? ────────→ code-simplification  (via /code-simplify, optional pre-ship)
+├── Shipping a milestone? ───────────────────→ /ship:
+│   ├── Commits/versioning? ─────────────────→ git-workflow-and-versioning  (always on code change)
+│   ├── Pipeline? ───────────────────────────→ ci-cd-and-automation
+│   ├── Removing/migrating? ─────────────────→ deprecation-and-migration
+│   ├── Decisions/docs? ─────────────────────→ documentation-and-adrs
+│   └── Launch readiness? ───────────────────→ shipping-and-launch
+└── Closing the loop? ──────────────────────→ learnings-capture  (via /digest)
 ```
 
-Not every task needs every skill. A bug fix might only need: `debugging-and-error-recovery` → `test-driven-development` → `code-review-and-quality`.
+A bug fix might only need: debugging-and-error-recovery → test-driven-development → /review. Load selectively — more context isn't better.
 
-## Quick Reference
+## What Cairn adds over base agent-skills
 
-| Phase | Skill | One-Line Summary |
-|-------|-------|-----------------|
-| Define | interview-me | Surface what the user actually wants before any plan, spec, or code exists |
-| Define | idea-refine | Refine ideas through structured divergent and convergent thinking |
-| Define | spec-driven-development | Requirements and acceptance criteria before code |
-| Plan | planning-and-task-breakdown | Decompose into small, verifiable tasks |
-| Build | incremental-implementation | Thin vertical slices, test each before expanding |
-| Build | source-driven-development | Verify against official docs before implementing |
-| Build | doubt-driven-development | Adversarial fresh-context review of every non-trivial decision |
-| Build | context-engineering | Right context at the right time |
-| Build | frontend-ui-engineering | Production-quality UI with accessibility |
-| Build | api-and-interface-design | Stable interfaces with clear contracts |
-| Verify | test-driven-development | Failing test first, then make it pass |
-| Verify | browser-testing-with-devtools | Chrome DevTools MCP for runtime verification |
-| Verify | debugging-and-error-recovery | Reproduce → localize → fix → guard |
-| Review | code-review-and-quality | Five-axis review with quality gates |
-| Review | code-simplification | Preserve behavior while reducing unnecessary complexity |
-| Review | security-and-hardening | OWASP prevention, input validation, least privilege |
-| Review | performance-optimization | Measure first, optimize only what matters |
-| Ship | git-workflow-and-versioning | Atomic commits, clean history |
-| Ship | ci-cd-and-automation | Automated quality gates on every change |
-| Ship | deprecation-and-migration | Remove old systems and migrate users safely |
-| Ship | documentation-and-adrs | Document the why, not just the what |
-| Ship | shipping-and-launch | Pre-launch checklist, monitoring, rollback plan |
+- **Doc-first source of truth.** `.cairn/docs/NN.md` persists, drives drift awareness, gives 1-doc context via tags. `spec-driven-development` writes *into* it — never a competing spec file (composition contract).
+- **Subagent-driven `/build`.** Fresh subagent per task, cheapest-capable model at dispatch, green gate with a 5x→debugging handoff. The orchestrator thinks; cheap subagents type.
+- **`spec-compliance-review`** as Axis 0 of `/review` — judges *whether the right thing was built*, before quality judges *how*.
+- **Learnings loop.** `/digest` → `learnings-capture` → promoted rules → surfaced at the next `/spec` and `/build` entry. Capture without read-back is a diary; this closes the loop.
+- **Branch Guard** (PreToolUse hook) — the one always-on mechanism, because it's enforcement, not context.
+
+## Operating rules (shared)
+
+1. **Opt-in doc-first.** `/spec` writes the doc only when invoked. `/build` works with or without one — never block direct implementation.
+2. **One spec artifact.** The doc is the only spec file. Plans (`.cairn/plans/`) are distinct and ephemeral.
+3. **Reviews are fresh-eyes.** Never let the author review their own work — per-task sanity and `/review` both use fresh subagents.
+4. **Reuse over reinvention.** Reference existing skills; never duplicate them.
+5. **Read learnings before building.** At `/spec` and `/build` entry, surface tag-matched durable rules from `.cairn/learnings.md`.

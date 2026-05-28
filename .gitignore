@@ -5,3 +5,5 @@ node_modules/
 *.log
 .claude/.simplify-ignore-cache/
 .claude/sdd-cache/
+.cairn/plans/      # ephemeral task breakdowns
+.cairn/audits/     # if you later add the optional /scan machinery
