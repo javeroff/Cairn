@@ -10,6 +10,9 @@ You are running Cairn's **review** phase. This is the holistic, multi-axis revie
 ## Inputs
 - `$ARGUMENTS` — a feature id (reviews the diff against its `.cairn/docs/` doc), a git ref/range, or `staged`. If empty, review the current branch's diff vs. its base.
 
+## Scope the review via the graph (if present)
+`/review` is the review front door (it owns spec-compliance Axis 0). Call `detect_changes_tool` + `get_review_context_tool` to scope review to the real blast radius, and `get_affected_flows_tool` to confirm no execution path is silently broken. Optionally enrich with `find_large_functions_tool` and `get_knowledge_gaps_tool` (untested hotspots) — opt-in, skip if noisy. Do **not** also invoke CRG's `review-changes` skill — `/review` pulls the same graph context, plus spec-compliance. (Degrades gracefully if the graph is absent.)
+
 ## Axes (run in order; each as a fresh subagent where it benefits)
 
 ### Axis 0 — Spec compliance *(only if a feature doc exists)*

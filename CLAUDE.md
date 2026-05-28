@@ -41,3 +41,8 @@ docs/         → Setup guides for different tools
 - Always: Follow the skill-anatomy.md format for new skills
 - Never: Add skills that are vague advice instead of actionable processes
 - Never: Duplicate content between skills — reference other skills instead
+
+<!-- CAIRN:CRG:START -->
+### Cairn x graph (lifecycle mapping)
+/spec entry: get_minimal_context + semantic_search_nodes (escalate to explore-codebase on hard brownfield). /plan + /build per-task: get_impact_radius + get_affected_flows + hub/bridge checks. /build 5x-debug: get_impact_radius + query_graph + get_affected_flows. /review: detect_changes + get_review_context + get_affected_flows (opt-in find_large_functions, get_knowledge_gaps). /ship: detect_changes + get_affected_flows. Onboarding a brownfield repo: get_architecture_overview + list_communities once. Cairn commands are the front door; never run CRG's parallel skills (review-changes, debug-issue) alongside their Cairn counterparts. Do NOT use CRG's wiki/docs tools — Cairn owns intent. Blast radius is perfect-recall / loose-precision: widen context safely. Degrades gracefully if the graph is absent.
+<!-- CAIRN:CRG:END -->

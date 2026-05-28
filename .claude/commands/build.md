@@ -31,6 +31,8 @@ Use the task's `complexity` signal plus your read of the task as inputs, but **y
 - When uncertain between two tiers, pick the cheaper one and let the subagent escalate (Step 2c). A cheap-first attempt that escalates is usually cheaper than defaulting high.
 
 ### 2b — Dispatch the implementation subagent
+Before dispatching, call `get_impact_radius_tool` on the task's files and include the affected callers/dependents/tests in the subagent's context, so it can't break a caller it never read. (Skip if the graph is absent.)
+
 Spawn a fresh subagent (Task tool) at the chosen model with **only**: the feature doc, this one task (purpose/files/tests), and the relevant test file(s). Not the whole plan, not sibling tasks. Instruct it to follow TDD strictly: write/confirm the failing test (RED), then minimal code to pass (GREEN). Tests are never modified to pass — only implementation.
 
 ### 2c — Out-of-depth signal
@@ -43,6 +45,7 @@ After the subagent returns, run the task's tests + typecheck.
   > Iteration N — exact error/file/line · which assumption was wrong · the ONE targeted fix
   Fix implementation only. Never edit tests to pass.
 - **On the 5th failed iteration: STOP. Do not attempt a 6th.** Dispatch a fresh subagent that follows the existing `agent-skills:debugging-and-error-recovery` skill, passing it the task, the test, and the full iteration history. Its job is root-cause analysis, not more guessing — it returns either a diagnosed fix or a precise statement of why the task is blocked. Integrate its finding; if still blocked, surface to the user with its report. (No custom debugger — reuse the skill that already exists.)
+  - **Graph-assisted localization (if present):** the `debugging-and-error-recovery` subagent uses the graph to localize the fault — `get_impact_radius_tool` on the failing files, `query_graph_tool` (`callers_of` / `callees_of`) to trace the call chain, and `get_affected_flows_tool` for the broken execution path. This is the structural backbone CRG's `debug-issue` skill provides; keep `debugging-and-error-recovery` as the orchestrating skill — it *consults* the graph rather than deferring to a separate debug flow. Never dispatch both.
 
 ## Step 3 — Per-task compliance sanity (light)
 After a task's green gate passes, run a **light** spec-compliance check in a fresh subagent: did this task implement its slice of the doc's Business Rules and Edge Cases? This is a fast sanity pass to catch a missed requirement while context is fresh — not the full review. Blocking miss → return to step 2b. (The authoritative, multi-axis review is `/review`, run at feature completion in Step 5 — `/build` does not own review logic.)

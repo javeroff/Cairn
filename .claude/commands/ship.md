@@ -15,6 +15,8 @@ You are running Cairn's **ship** phase. This is the final checkpoint before a mi
 2. Identify the features in scope: those with `status: complete` (or the ids passed in). List them.
 
 ## Step 1 — Serial gates (each must pass before the next)
+Before the gates, if the code graph is present: call `detect_changes_tool` across the milestone diff for a risk-scored map, and `get_affected_flows_tool` for the runtime paths the milestone touches; feed both to the persona fan-out in Step 2. (Degrades gracefully if the graph is absent.)
+
 Compose the existing Ship-phase skills **in order**. A failing gate stops the ship.
 
 1. **`git-workflow-and-versioning`** — clean history, conventional commits, version bump appropriate to the change (semver), changelog updated. This skill applies on any code change — it always runs.

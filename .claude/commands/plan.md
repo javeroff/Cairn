@@ -29,6 +29,8 @@ For each task capture:
 ## Step 2 — File-declaration gate
 Build the file→task map. **No two tasks in the same layer may declare the same file.** If two parallel tasks need the same file, either serialize them (add a dependency) or split the file's concerns. Report the gate result explicitly.
 
+**Graph-aware gate (if the code graph is present).** For each task's declared `files`, call `get_impact_radius_tool` (dependency facts about specific files — not minimal-context). Then call `get_affected_flows_tool` to see which execution paths the task touches, and check the task's files against `get_hub_nodes_tool` / `get_bridge_nodes_tool`. **If a task touches a hub or a bridge, "parallel-safe" is suspect** — a widely-called function or a chokepoint isn't isolated even if no sibling task declares the same file. Serialize or split when the graph says a file is central. (Degrades gracefully if the graph is absent.)
+
 ## Step 3 — Write the plan
 Write `.cairn/plans/<id>.md`:
 

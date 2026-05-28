@@ -12,10 +12,11 @@ You are running Cairn's **spec** phase. The output is a single feature doc that 
 
 ## Step 0 — Bootstrap (silent)
 1. **Load the workflow map.** Read the `using-agent-skills` meta-skill first — it routes work to the right command and skill across the lifecycle. This is where the meta-skill loads (at workflow entry), not at session start.
-2. Ensure `.cairn/docs/` exists. Create it if missing, no prompt.
-3. Glob `.cairn/docs/*.md` to find the highest existing `NN` prefix. The new doc is `NN+1` (zero-padded, two digits).
-4. Read `~/.claude/cairn/templates/feature-doc.md` for the frontmatter schema you must follow.
-5. Read `.cairn/.startup.md` if present for project orientation (it is no longer auto-injected at session start).
+2. **Orient via the code graph (if present).** Default: call `get_minimal_context_tool` for cheap structural orientation. To locate relevant existing code, prefer `semantic_search_nodes_tool` over globbing (find by meaning, not exact name). **Escalate to the `explore-codebase` skill only when the feature touches an unfamiliar or complex existing area** that minimal-context doesn't make legible — that replaces any need to hand-document existing code. Greenfield: skip all of these. (Degrades gracefully if the graph is absent.)
+3. Ensure `.cairn/docs/` exists. Create it if missing, no prompt.
+4. Glob `.cairn/docs/*.md` to find the highest existing `NN` prefix. The new doc is `NN+1` (zero-padded, two digits).
+5. Read `~/.claude/cairn/templates/feature-doc.md` for the frontmatter schema you must follow.
+6. Read `.cairn/.startup.md` if present for project orientation (it is no longer auto-injected at session start).
 
 ## Step 1 — Understand before asking (parallel context gather)
 Before asking the user anything, dispatch up to 3 lightweight context probes **in parallel** using the Task tool with the **cheapest capable model (haiku)**:
