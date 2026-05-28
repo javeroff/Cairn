@@ -9,7 +9,7 @@
   "files": [
     "bin/",
     "src/",
-    ".claude/commands/",
+    ".claude/",
     "agents/",
     "skills/",
     "hooks/",
