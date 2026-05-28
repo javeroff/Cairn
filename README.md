@@ -78,6 +78,7 @@ cairn install --install-local  # ./.claude/ + ./CLAUDE.md (scopes Branch Guard)
 cairn install --dir <path>     # custom directory (skips CLAUDE.md)
 cairn update                   # re-run install (idempotent)
 ```
+
 </details>
 
 ## The lifecycle
