@@ -15,7 +15,7 @@ Gather, in parallel where possible (cheap **haiku** probes):
 - detected stack (from `package.json` / `go.mod` / `pyproject.toml`)
 - current git branch
 - last `/digest` or build activity if discernible
-- **doc drift** — for each doc carrying `last_synced` + `source_files`: run `git log --oneline --after="<last_synced>" -- <source_files>` and check each path exists. Classify: `in_sync` (paths present, no newer commits), `drifted` (commits after `last_synced`), `broken` (a `source_files` path missing from disk), `untracked` (no `last_synced` field)
+- **doc drift** — for each doc with `source_files`: take the doc's own last-sync commit as the baseline (`git log -1 --format=%H -- <doc>`), then list source commits after it with `git log --oneline <doc-sha>..HEAD -- <source_files>`. Classify: `drifted` (range non-empty — source changed since the doc was synced), `broken` (a `source_files` path missing from disk), `untracked` (doc never committed, or no `source_files`), else `in_sync`. Use the doc's commit SHA as the boundary — **not** the bare `last_synced` date, which same-day/same-commit false-positives and is timezone-fragile; the SHA range excludes the sync commit itself. (`last_synced` stays the human-readable field shown in the doc + report.)
 
 ## Step 1 — Report (to the user, in chat)
 ```
