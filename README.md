@@ -23,7 +23,7 @@ The full agent-skills 7-command lifecycle, plus Cairn's `/digest` and `/status`.
 | ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
 | `/spec`          | Define | Writes the one source-of-truth doc to `.cairn/docs/NN.md` (opt-in). Loads the meta-skill at entry. `/spec sync <id>` re-syncs a drifted doc to its code. |
 | `/plan`          | Plan   | Decomposes the doc into subagent-ownable tasks with a file-declaration gate + complexity signal.                               |
-| `/build`         | Build  | SDD dispatcher: fresh subagent per task, model tiering, green gate, 5x→`debugging-and-error-recovery`, hands off to `/review`. |
+| `/build`         | Build  | Loads `subagent-driven-development` (dispatch loop, tiering, green gate, review) + `incremental-implementation` + `context-engineering` as orchestrator; routes craft skills into each subagent via the implementer-prompt template. Planned builds dispatch; trivial freeform runs in-session. Hands off to `/review`. |
 | `/test`          | Verify | Holistic verification — full suite + browser testing. (Reused from base.)                                                      |
 | `/review`        | Review | Spec-compliance (Axis 0) → quality → security → performance. Runs standalone too.                                              |
 | `/code-simplify` | Review | Optional, run on the milestone before ship. (Reused from base.)                                                                |

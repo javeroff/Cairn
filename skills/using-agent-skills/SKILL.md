@@ -19,7 +19,7 @@ Cairn = agent-skills (the skill library) + subagent-driven development (the exec
 |---|---|---|
 | `/spec` | Define | Writes the one source-of-truth doc to `.cairn/docs/NN.md` (opt-in). Composes interview-me, idea-refine, spec-driven-development. Reads `.cairn/learnings.md` + `.startup.md` at entry. |
 | `/plan` | Plan | Decomposes the doc into subagent-ownable tasks with a file-declaration gate and complexity signal → `.cairn/plans/NN.md`. |
-| `/build` | Build | SDD dispatcher: fresh subagent per task on the cheapest capable model, green gate (5x → debugging), light per-task compliance sanity, then hands off to `/review`. |
+| `/build` | Build | Orchestrator loads `subagent-driven-development` (dispatch loop) + `incremental-implementation` + `context-engineering`; dispatches a fresh subagent per task via the implementer-prompt template, which routes the craft skills into the subagent. Planned mode dispatches; trivial freeform runs in-session direct mode. Hands off to `/review`. |
 | `/test` | Verify | Holistic verification — full suite + browser testing. Reused from base as-is. |
 | `/review` | Review | Spec-compliance (Axis 0, when a doc exists) → quality → security → performance. The home of review. Runs standalone too. |
 | `/code-simplify` | Review | Optional. Run on the milestone before ship. Reused from base as-is. |
@@ -37,15 +37,20 @@ What are you doing?
 ├── Exploring a rough idea? ────────────────→ idea-refine
 ├── Defining a feature/project? ────────────→ spec-driven-development  (via /spec → writes the doc)
 ├── Breaking a spec into tasks? ────────────→ planning-and-task-breakdown  (via /plan)
-├── Building a feature? ────────────────────→ incremental-implementation  (via /build)
+├── Building a planned feature? ────────────→ /build runs TWO layers:
+│   │  ORCHESTRATOR loads (sequence + provision — never craft):
+│   ├── the dispatch loop ───────────────────→ subagent-driven-development
+│   ├── one vertical slice per task ─────────→ incremental-implementation
+│   ├── right-sized context per subagent ────→ context-engineering
+│   │  each dispatched SUBAGENT loads (via the implementer-prompt routing table):
+│   ├── always ──────────────────────────────→ test-driven-development
+│   ├── framework/library API? ──────────────→ source-driven-development
+│   ├── defines an interface? ───────────────→ api-and-interface-design
 │   ├── UI work? ────────────────────────────→ frontend-ui-engineering
-│   ├── API / interface work? ───────────────→ api-and-interface-design
-│   ├── Need the right context loaded? ──────→ context-engineering          (build composes at entry)
-│   ├── Framework code from memory? ─────────→ source-driven-development     (build composes when stack-specific)
-│   └── High stakes / unfamiliar / irreversible? → doubt-driven-development  (build composes on novel-tier tasks)
-├── Writing or running tests? ──────────────→ test-driven-development  (via /build per task, /test holistic)
+│   └── novel / high-stakes? ────────────────→ doubt-driven-development  (inline self-review)
+├── Full suite / a bug repro (not per-task)? → test-driven-development  (/test holistic)
 │   └── Browser-based? ──────────────────────→ browser-testing-with-devtools
-├── Something broke (5x green-gate fail)? ──→ debugging-and-error-recovery  (build dispatches on 5x)
+├── Something broke (5x green-gate fail)? ──→ debugging-and-error-recovery  (orchestrator dispatches on 5x)
 ├── Reviewing before merge? ────────────────→ /review:
 │   ├── Does it match the doc? ──────────────→ spec-compliance-review   (Axis 0)
 │   ├── Is it well written? ─────────────────→ code-review-and-quality  (Axis 1)
@@ -66,7 +71,7 @@ A bug fix might only need: debugging-and-error-recovery → test-driven-developm
 ## What Cairn adds over base agent-skills
 
 - **Doc-first source of truth.** `.cairn/docs/NN.md` persists, drives drift awareness, gives 1-doc context via tags. `spec-driven-development` writes *into* it — never a competing spec file (composition contract).
-- **Subagent-driven `/build`.** Fresh subagent per task, cheapest-capable model at dispatch, green gate with a 5x→debugging handoff. The orchestrator thinks; cheap subagents type.
+- **Subagent-driven `/build`.** `subagent-driven-development` is the orchestrator's playbook (dispatch, tier, gate, review); each task's craft skills are routed into the dispatched subagent via its `implementer-prompt` template + a `SKILLS LOADED:` report-back, so they can't be silently dropped. The orchestrator thinks; cheap subagents type. Trivial no-plan tasks skip dispatch (direct mode).
 - **`spec-compliance-review`** as Axis 0 of `/review` — judges *whether the right thing was built*, before quality judges *how*.
 - **Learnings loop.** `/digest` → `learnings-capture` → promoted rules → surfaced at the next `/spec` and `/build` entry. Capture without read-back is a diary; this closes the loop.
 - **Branch Guard** (PreToolUse hook) — the one always-on mechanism, because it's enforcement, not context.
