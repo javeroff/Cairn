@@ -21,15 +21,15 @@ The full agent-skills 7-command lifecycle, plus Cairn's `/digest` and `/status`.
 
 | Command          | Phase  | What it does                                                                                                                   |
 | ---------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| `/spec`          | Define | Writes the one source-of-truth doc to `.cairn/docs/NN.md` (opt-in). Loads the meta-skill at entry.                             |
+| `/spec`          | Define | Writes the one source-of-truth doc to `.cairn/docs/NN.md` (opt-in). Loads the meta-skill at entry. `/spec sync <id>` re-syncs a drifted doc to its code. |
 | `/plan`          | Plan   | Decomposes the doc into subagent-ownable tasks with a file-declaration gate + complexity signal.                               |
 | `/build`         | Build  | SDD dispatcher: fresh subagent per task, model tiering, green gate, 5x→`debugging-and-error-recovery`, hands off to `/review`. |
 | `/test`          | Verify | Holistic verification — full suite + browser testing. (Reused from base.)                                                      |
 | `/review`        | Review | Spec-compliance (Axis 0) → quality → security → performance. Runs standalone too.                                              |
 | `/code-simplify` | Review | Optional, run on the milestone before ship. (Reused from base.)                                                                |
 | `/ship`          | Ship   | Milestone deploy checkpoint: serial Ship gates → parallel persona fan-out → go/no-go.                                          |
-| `/digest`        | Learn  | Extracts durable learnings into `.cairn/learnings.md`; 3x promotes.                                                            |
-| `/status`        | Orient | Rebuilds `.cairn/.startup.md` (read at `/spec` and `/build` entry — no SessionStart injection).                                |
+| `/digest`        | Learn  | Extracts durable learnings (with source attribution) into `.cairn/learnings.md`; 3x promotes; distils a `## Build Notes` section onto the doc and archives the spent plan. |
+| `/status`        | Orient | Rebuilds `.cairn/.startup.md` (read at `/spec` and `/build` entry — no SessionStart injection). Flags docs that drifted from their code (`last_synced` vs git log). |
 
 ## Design decisions
 

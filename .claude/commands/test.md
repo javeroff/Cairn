@@ -1,19 +1,15 @@
 ---
-description: Run TDD workflow — write failing tests, implement, verify. For bugs, use the Prove-It pattern.
+description: Verify phase. Delegates to test-driven-development (and browser-testing-with-devtools for browser work). Run the full suite; for bugs, the Prove-It pattern.
+argument-hint: [feature-id | area | "bug: <description>"]
 ---
 
-Invoke the agent-skills:test-driven-development skill.
+# /test — Verify phase
 
-For new features:
-1. Write tests that describe the expected behavior (they should FAIL)
-2. Implement the code to make them pass
-3. Refactor while keeping tests green
+Orchestration only. The Verify skills do the work.
 
-For bug fixes (Prove-It pattern):
-1. Write a test that reproduces the bug (must FAIL)
-2. Confirm the test fails
-3. Implement the fix
-4. Confirm the test passes
-5. Run the full test suite for regressions
+## Delegate
+- **Load and follow the `test-driven-development` skill** — full-suite verification, the test pyramid, test sizing, and for bug fixes its Prove-It pattern (write a failing test that reproduces the bug, then make it pass). The skill owns the method.
+- **If the change runs in a browser: load and follow the `browser-testing-with-devtools` skill** for the live reproduce → inspect → verify loop. Skip for backend/CLI.
 
-For browser-related issues, also invoke agent-skills:browser-testing-with-devtools to verify with Chrome DevTools MCP.
+## Cairn wiring
+If a feature doc covers the area, check its Verification section is satisfied and note gaps. Report pass/fail plus any missing coverage; feed a recurring class of gap to `/digest`.

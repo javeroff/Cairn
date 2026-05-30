@@ -1,60 +1,27 @@
 ---
-description: End-of-milestone deploy checkpoint. The final gate before deploying — runs the Ship-phase skills as serial gates, then a parallel three-persona review, and emits one go/no-go verdict. Not a per-feature step.
-argument-hint: [milestone or feature ids being shipped]
+description: Ship phase, end-of-milestone deploy checkpoint. Delegates the Ship skills as serial gates then fans out the three personas. The only command that sets a feature status to complete. Not a per-feature step.
+argument-hint: [milestone or feature ids]
 ---
 
-# /ship — Milestone Deploy Checkpoint
+# /ship — Ship phase
 
-You are running Cairn's **ship** phase. This is the final checkpoint before a milestone deploys — not something run per feature. It composes the existing Ship-phase skills as ordered gates, then fans out three specialist personas in parallel, and synthesizes a single deploy decision.
+Orchestration only. Each gate loads and follows its skill; this command sequences them, runs the persona fan-out, emits one verdict, and is the **sole setter of `status: complete`**.
 
-## Inputs
-- `$ARGUMENTS` — the milestone name or the feature ids being shipped. If empty, ship the current branch's completed features.
+## Wire-up
+- Scope = the passed ids, else the current branch's `in_progress` features whose build + review are done. Confirm not on `main` (shipping merges into it).
+- If the graph is present: `detect_changes_tool` for a risk map + `get_affected_flows_tool` for touched runtime paths; feed both to the fan-out.
 
-## Step 0 — Scope & branch
-1. Confirm not on `main`/`master` (Branch Guard enforces this for writes). Shipping merges *into* main; you prepare from the feature/milestone branch.
-2. Identify the features in scope: those with `status: complete` (or the ids passed in). List them.
+## Serial gates (each delegates; a failing gate stops the ship)
+1. **Load and follow the `git-workflow-and-versioning` skill.**
+2. **Load and follow the `ci-cd-and-automation` skill** — green in CI, not just locally.
+3. **Load and follow the `documentation-and-adrs` skill.**
+4. **If anything was deprecated/migrated: load and follow the `deprecation-and-migration` skill.**
+5. **Load and follow the `shipping-and-launch` skill** — rollback plan, flags, monitoring.
 
-## Step 1 — Serial gates (each must pass before the next)
-Before the gates, if the code graph is present: call `detect_changes_tool` across the milestone diff for a risk-scored map, and `get_affected_flows_tool` for the runtime paths the milestone touches; feed both to the persona fan-out in Step 2. (Degrades gracefully if the graph is absent.)
+Each skill owns its checklist; the command does not restate them.
 
-Compose the existing Ship-phase skills **in order**. A failing gate stops the ship.
+## Persona fan-out + verdict
+Gates green → dispatch `code-reviewer`, `security-auditor`, `test-engineer` concurrently (one turn) against the milestone diff. Synthesize: NO-GO on any failed gate or any P1/critical; else GO.
 
-1. **`git-workflow-and-versioning`** — clean history, conventional commits, version bump appropriate to the change (semver), changelog updated. This skill applies on any code change — it always runs.
-2. **`ci-cd-and-automation`** — the pipeline is green: tests, lint, typecheck, build all pass in CI, not just locally. If there's no CI, flag it and run the equivalents locally.
-3. **`documentation-and-adrs`** — public-facing docs reflect the shipped features; any architecturally significant decision in this milestone has an ADR.
-4. **`deprecation-and-migration`** — *only if* anything was deprecated or requires a migration. Confirm migration steps and dependent-feature flags (cross-check `depends_on` in the shipped docs).
-5. **`shipping-and-launch`** — the launch checklist: rollback plan, feature flags for risky changes, monitoring/alerts in place, canary strategy if applicable.
-
-## Step 2 — Parallel persona fan-out
-With the gates green, dispatch the three specialist personas **concurrently** (fresh subagents) against the full milestone diff:
-- **`code-reviewer`** — five-axis review across the milestone (not per-task; the integrated whole).
-- **`security-auditor`** — vulnerability scan of the shipped surface (auth, input handling, secrets, dependencies).
-- **`test-engineer`** — coverage and test-strategy adequacy for what's shipping.
-
-Each returns findings by severity. This is the one endorsed multi-persona orchestration — they run in parallel and do not invoke each other.
-
-## Step 3 — Synthesize the verdict
-Merge the gate results and the three persona reports into a single decision:
-
-```
-🚢 SHIP CHECKPOINT — <milestone>
-   Features: <ids>
-
-   Gates:   git ✅ | ci ✅ | docs ✅ | migration n/a | launch ✅
-   Reviews: code-reviewer <P1:0 P2:1> | security <P1:0> | test <coverage 84%>
-
-   VERDICT: GO | NO-GO
-   Blocking: <list any P1/critical findings or failed gates>
-   Recommended before deploy: <non-blocking but advised>
-```
-
-`NO-GO` if any gate failed or any persona returned a P1/critical finding. Otherwise `GO`.
-
-## Step 4 — On GO
-Update shipped docs to `status: complete` (if not already) and `phase: ship`. Offer: merge to main / open PR / hold. After merge, suggest `/digest` on the shipped features to capture milestone learnings, and `/status` to refresh `.cairn/.startup.md`.
-
-## Anti-rationalization
-- "Tests pass locally, skip CI" → local ≠ CI. Environment drift is exactly what ship-time CI catches. Run the gate.
-- "Security review for a small milestone is overkill" → the persona fan-out is cheap (parallel) and ship is the last gate before users. Run all three.
-- "One P2 finding, ship anyway" → P2 is non-blocking; record it as recommended-before-deploy and proceed. But never wave through a P1 — that's what NO-GO is for.
-- "Ship each feature as it finishes" → no. Ship is milestone-level. Per-feature completion is `/build` + `/digest`; `/ship` gates the integrated whole.
+## On GO (the one place complete is set)
+Set the shipped features' frontmatter `status: complete`, `phase: ship`, `last_synced` today. Offer merge / PR / hold. After merge, suggest `/digest` and `/status` (which rebuilds the derived `.startup.md` from the now-updated frontmatter).

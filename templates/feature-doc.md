@@ -44,3 +44,8 @@ not just unit tests passing.
 
 ## Known Issues
 Discovered during build or audit. Empty at spec time.
+
+## Build Notes
+Filled by `/digest` at feature completion. Distilled residue from the plan/tasks —
+gotchas, complexity tags that proved wrong, key build decisions — for whoever builds
+something related next. Empty until digested.

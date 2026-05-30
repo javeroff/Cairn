@@ -15,6 +15,7 @@ Gather, in parallel where possible (cheap **haiku** probes):
 - detected stack (from `package.json` / `go.mod` / `pyproject.toml`)
 - current git branch
 - last `/digest` or build activity if discernible
+- **doc drift** — for each doc carrying `last_synced` + `source_files`: run `git log --oneline --after="<last_synced>" -- <source_files>` and check each path exists. Classify: `in_sync` (paths present, no newer commits), `drifted` (commits after `last_synced`), `broken` (a `source_files` path missing from disk), `untracked` (no `last_synced` field)
 
 ## Step 1 — Report (to the user, in chat)
 ```
@@ -27,9 +28,9 @@ Learnings: e durable rules promoted
 Branch:    <current>
 Stack:     <detected>
 
-Drift watch: <features whose last_synced predates recent commits, if any>
+Drift:     <drifted/broken docs, if any → re-sync with /spec sync <id>>
 ```
-(Drift watch is a light heuristic here — the full `/scan` machinery is the optional MDD add-on, not core.)
+`/status` only **detects and reports** drift — it never rewrites a doc (its sole write is `.cairn/.startup.md`). Fixing a drifted/broken doc is `/spec sync <id>`.
 
 ## Step 2 — Rebuild `.cairn/.startup.md`
 Write the file with an auto-generated section (rebuilt every run) above a preserved, append-only Notes section below a `---` divider. Do **not** clobber existing notes.

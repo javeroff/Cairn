@@ -35,6 +35,7 @@ Load learnings (read-only) at the start of `/spec` and `/build`, filtered by the
    - WHAT HAPPENED: <one line>
    - ROOT CAUSE: <the actual cause, not the symptom>
    - DURABLE RULE: <the rule a future task should follow>
+   - SOURCE: <the artifact this came from — e.g. "plan T3 green-gate iter 4", "user correction during build", "spec-compliance review of 03">
    - TAGS: [<domain keywords for retrieval>]
    ```
 3. **Dedupe + promote.** If a Recent Learning's DURABLE RULE matches an existing one, increment a `(seen Nx)` counter instead of duplicating. When a rule reaches **3x**, move it to **Durable Rules (promoted)** and flag it as a candidate for a project `CLAUDE.md` rule or a new skill.
@@ -46,6 +47,7 @@ Load learnings (read-only) at the start of `/spec` and `/build`, filtered by the
 - WHAT HAPPENED: green gate failed 5x on webhook signature verification
 - ROOT CAUSE: Stripe webhook secret is distinct from the API secret key; tests used the wrong env var
 - DURABLE RULE: webhook tests must use STRIPE_WEBHOOK_SECRET, never STRIPE_SECRET_KEY
+- SOURCE: plan T4 green-gate iter 5 → debugging-and-error-recovery handoff
 - TAGS: [stripe, webhooks, env]
 ```
 Promoted after recurrence:
@@ -65,6 +67,6 @@ Promoted after recurrence:
 - Learnings never read back at `/spec`/`/build` entry — capture without feedback is a diary, not a mechanism.
 
 ## Verification
-- [ ] Every entry has a ROOT CAUSE and a one-sentence DURABLE RULE.
+- [ ] Every entry has a ROOT CAUSE, a one-sentence DURABLE RULE, and a SOURCE artifact it traces back to.
 - [ ] Recurring rules carry a seen-counter; 3x rules are promoted.
 - [ ] `/spec` and `/build` read tag-matched learnings before work begins.

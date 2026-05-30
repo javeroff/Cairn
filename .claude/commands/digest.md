@@ -21,7 +21,7 @@ For the feature, collect the artifacts the build produced:
 - any user corrections during the build
 
 ## Step 1 — Extract durable rules
-Invoke the `learnings-capture` skill. For each piece of evidence, ask: *is this a one-off, or a rule a future task should follow?* Record only the rules. Specifically mine:
+Load and follow the `learnings-capture` skill. For each piece of evidence, ask: *is this a one-off, or a rule a future task should follow?* Record only the rules. Specifically mine:
 - **Root causes** behind every 5x→debugging handoff (these are the highest-value learnings — they cost the most to discover).
 - **Corrections** the user made (their corrections encode preferences and constraints the doc missed).
 - **Estimation misses** — tasks tagged `mechanical` that turned out `novel` (recalibrates future `/plan` complexity tagging).
@@ -29,16 +29,22 @@ Invoke the `learnings-capture` skill. For each piece of evidence, ask: *is this 
 - **Scope drift** — code beyond the doc, or doc rules never implemented.
 
 ## Step 2 — Write + promote
-Append entries to `.cairn/learnings.md` via the skill's format. Dedupe against existing rules; increment seen-counters; promote anything at 3x to Durable Rules and flag it as a `CLAUDE.md` rule or new-skill candidate.
+The `learnings-capture` skill owns the write/dedupe/promote format — follow it. Populate each entry's **SOURCE** from the evidence gathered in Step 0 (the iteration, review, or correction it came from). Promote anything that reaches 3x to Durable Rules and flag it as a `CLAUDE.md` rule or new-skill candidate.
 
-## Step 3 — Feed back
+## Step 3 — Consolidate the doc, archive the scaffolding
+The feature doc is the durable reference a future *related* feature will read — distill the build into it, then clear the spent scaffolding so files don't accumulate:
+- **Append `## Build Notes (digested <date>)`** to `.cairn/docs/<id>-<slug>.md` (the template reserves this section). Capture only what the plan/tasks taught that the doc doesn't already say: gotchas hit, complexity tags that proved wrong, key build decisions — anything worth knowing before building something related. Terse bullets, not prose.
+- **Archive the plan.** Move `.cairn/plans/<id>.md` → `.cairn/plans/archive/<id>.md`. The feature doc is **never** archived — it *is* the reference.
+
+## Step 4 — Feed back
 Update `.cairn/.startup.md` so its Rules Summary reflects any newly promoted durable rules. This is what makes the next session start with the learning already in context.
 
-## Step 4 — Report
+## Step 5 — Report
 \`\`\`
 🧠 Digest complete: <id>
    New learnings: N (root causes: a, corrections: b, estimation: c, tooling: d)
    Promoted to durable rules: M
+   Build Notes appended to .cairn/docs/<id>; plan archived to .cairn/plans/archive/
    Candidates for CLAUDE.md / new skill: <list>
 \`\`\`
 

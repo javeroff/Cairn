@@ -1,54 +1,23 @@
 ---
-description: Holistic review of a feature or change before merge. Runs spec-compliance (does it match the doc?) then the five-axis quality, security, and performance review. The home of spec-compliance-review. Runs on any change, not just Cairn-built.
+description: Review phase. Delegates to spec-compliance-review then the Review skills (code-review-and-quality, security-and-hardening, performance-optimization), each as a fresh-eyes pass. Runs on any change.
 argument-hint: [feature-id | git ref | "staged"]
 ---
 
-# /review — Feature / Change Review
+# /review — Review phase
 
-You are running Cairn's **review** phase. This is the holistic, multi-axis review of a change before it merges — distinct from `/build`'s per-task green gate and from `/ship`'s milestone persona fan-out. It is the single home of spec-compliance review. Run review subagents fresh; never let the author review their own work.
+Orchestration only. Each axis loads and follows its skill; the command sequences them and never lets the author review their own work. (Simplification is its own command, `/code-simplify` — not folded in.)
 
-## Inputs
-- `$ARGUMENTS` — a feature id (reviews the diff against its `.cairn/docs/` doc), a git ref/range, or `staged`. If empty, review the current branch's diff vs. its base.
+## Wire-up
+- `$ARGUMENTS` = feature id (diff vs its `.cairn/docs` doc), git ref/range, or `staged`. Empty → current branch vs base.
+- If the graph is present: `detect_changes_tool` + `get_review_context_tool` to scope to the real blast radius. Don't also invoke CRG's `review-changes` — `/review` is the front door.
 
-## Scope the review via the graph (if present)
-`/review` is the review front door (it owns spec-compliance Axis 0). Call `detect_changes_tool` + `get_review_context_tool` to scope review to the real blast radius, and `get_affected_flows_tool` to confirm no execution path is silently broken. Optionally enrich with `find_large_functions_tool` and `get_knowledge_gaps_tool` (untested hotspots) — opt-in, skip if noisy. Do **not** also invoke CRG's `review-changes` skill — `/review` pulls the same graph context, plus spec-compliance. (Degrades gracefully if the graph is absent.)
+## Delegate (in order, fresh subagents)
+- **Axis 0 — only if a feature doc exists: load and follow the `spec-compliance-review` skill.** Did it build the right thing? Runs first; BLOCKED on any missing/partial requirement. No doc → skip and note it.
+- **Axis 1: load and follow the `code-review-and-quality` skill** (use the `code-reviewer` persona where it helps).
+- **Axis 2: load and follow the `security-and-hardening` skill**.
+- **Axis 3: load and follow the `performance-optimization` skill**.
 
-## Axes (run in order; each as a fresh subagent where it benefits)
-
-### Axis 0 — Spec compliance *(only if a feature doc exists)*
-Load the `spec-compliance-review` skill. Given the doc + the diff: is every Business Rule and Edge Case implemented, with no scope drift? This runs **first** — no point judging code quality on an implementation that builds the wrong thing. If no `.cairn/docs/` doc covers the change (e.g. reviewing arbitrary code), skip this axis and note it.
-
-### Axis 1 — Code quality
-Load `code-review-and-quality` (five-axis) / the `code-reviewer` persona on the diff: correctness, clarity, structure, error handling, maintainability.
-
-### Axis 2 — Security
-Load `security-and-hardening`: input validation, authn/authz, secrets, injection surfaces, dependency risk.
-
-### Axis 3 — Performance
-Load `performance-optimization`: hot paths, N+1s, unnecessary allocation/IO, algorithmic complexity where it matters.
+Each skill carries its own checklist and severity labels — the command does not restate them.
 
 ## Output
-```
-🔍 REVIEW — <feature-id / ref>
-
-Axis 0 Spec compliance:  PASS | BLOCKED (<n missing/partial>)   [skipped: no doc]
-Axis 1 Quality:          <P1:0 P2:2 P3:3>
-Axis 2 Security:         <P1:0 P2:1>
-Axis 3 Performance:      <P1:0 P2:0>
-
-Blocking (must fix before merge): <P1s + spec-compliance misses>
-Advisory (recommended):           <P2/P3>
-```
-
-Spec-compliance misses and any P1 are **blocking**. P2/P3 are advisory.
-
-## Lifecycle
-- `/build` calls this flow at feature completion before declaring a feature done.
-- Run standalone anytime: on a PR, on legacy code, on a colleague's branch.
-- After review passes, the optional `/code-simplify` may run before `/ship`.
-- Feed blocking findings that revealed a class of mistake to `/digest` → `learnings-capture`.
-
-## Anti-rationalization
-- "I'll review quality first, compliance later" → no. Axis 0 is first by design: quality review of the wrong feature is wasted work.
-- "No doc, so skip review entirely" → skip only Axis 0. Axes 1–3 still apply to any code.
-- "The author already looked it over" → the author's context is the bias. Review is fresh-eyes by definition.
+Per-axis pass/findings by severity. Spec-compliance misses and any P1 are blocking; P2/P3 advisory. Feed a finding that revealed a class of mistake to `/digest`.

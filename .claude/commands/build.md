@@ -1,75 +1,23 @@
 ---
-description: Execute a Cairn plan via subagent-driven development. Fresh subagent per task on the cheapest capable model, green-gate loop, two-stage review. Works with or without a plan (opt-in doc-first).
+description: Build phase, subagent dispatcher. Orchestration spine only; the build skills do the craft. Works with or without a plan (opt-in doc-first).
 argument-hint: <feature-id> | <freeform task if no doc>
 ---
 
-# /build — Subagent-Driven Dispatcher
+# /build — Build phase
 
-You are the **orchestrator**. You do not write implementation code yourself. You dispatch fresh subagents per task, gate their output, and integrate. "The expensive model does the thinking; the cheap model does the typing."
+The command orchestrates: dispatch a fresh subagent per task, pick the cheapest capable model, gate on green, route failures and review, and wire the `.cairn` lifecycle. The **build skills do the actual work** — the subagent loads and follows them; this command does not reproduce their content. "The expensive model thinks; the cheap model types."
 
-## Inputs
-- `$ARGUMENTS` — a feature id (preferred) or, if no doc exists, a freeform task.
+## Wire-up
+- Plan at `.cairn/plans/<id>.md` → planned mode. Doc but no plan → offer `/plan` or single-task. Neither → direct mode (never block for lack of a doc).
+- Read `.cairn/.startup.md` + tag-matched `.cairn/learnings.md` at entry.
+- Confirm not on `main` (Branch Guard enforces); create `feat/<id>` if needed.
+- Planned-mode entry: set feature `status: in_progress`. **`/build` never sets `complete` — only `/ship` does.**
 
-## Step 0 — Resolve mode (opt-in doc-first)
-- If a plan exists at `.cairn/plans/<id>.md` → **planned mode** (full pipeline below).
-- If a doc exists but no plan → offer to run `/plan` first, or proceed single-task using the doc as context.
-- If neither exists → **direct mode**: this is allowed. Build the freeform task with the green gate + review gates below, skipping the per-layer dispatch. Never block work for lack of a doc.
+## Per-task dispatch (process in dependency order; dispatch parallel-safe tasks concurrently)
+1. **Pick the model**: mechanical → haiku, standard → sonnet, novel/security/irreversible → opus. Floor: any task where skill adherence is load-bearing runs sonnet minimum — haiku under-follows multi-step skills.
+2. **Dispatch a fresh subagent** (Task tool) with only the doc + this one task + its test file(s) — plus, if the graph is present, the affected callers/dependents/tests from `get_impact_radius_tool` on the task's files, so it can't break a caller it never read. Instruct it to **load and follow the build skills that apply**: `incremental-implementation` and `test-driven-development` always; `context-engineering` at entry; `source-driven-development` if it touches a framework/library API; `doubt-driven-development` if novel/high-stakes/irreversible; `frontend-ui-engineering` if UI; `api-and-interface-design` if API. The subagent follows each skill's own process — the command does not restate it. **It closes with exactly one status:** `DONE` (complete, self-reviewed, committed), `DONE_WITH_CONCERNS` (complete but flags an issue to carry forward), `BLOCKED` (cannot proceed — needs a decision or unblock), or `NEEDS_CONTEXT` (missing information to implement correctly). Orchestrator response: `DONE`/`DONE_WITH_CONCERNS` → run the green gate (carry any concern to `/review`); `BLOCKED`/`NEEDS_CONTEXT` → supply the missing context or surface to the user — never dispatch a blind retry.
+3. **Green gate** (tests + typecheck), 5-iteration ceiling with a one-line diagnosis each iteration; fix implementation only. 5th failure → stop, dispatch a fresh subagent that loads **`debugging-and-error-recovery`** with the iteration history. No 6th guess. (If the graph is present, that subagent localizes via `get_impact_radius_tool` / `query_graph_tool` / `get_affected_flows_tool`.)
+4. On green: flip the task's box to `- [x]` in `.cairn/plans/<id>.md`, then run the per-task spec-compliance check **tiered by risk**: mechanical/standard tasks → the implementer runs an inline self-review checklist against the task's acceptance criteria before reporting `DONE` (no extra dispatch); novel/security/irreversible tasks → a **fresh** subagent (never the author) runs the check independently. The full `/review` flow at Finish runs regardless of tier.
 
-## Step 1 — Branch
-Confirm not on `main`/`master` (Branch Guard will block writes anyway). If on main with a clean tree, create `feat/<id-or-slug>`. If dirty, stop and offer to commit/stash.
-
-## Step 2 — Per-task dispatch loop (planned mode)
-Process layers in order. Within a layer, tasks are parallel-safe (file-declaration gate guaranteed this in `/plan`) — dispatch them concurrently.
-
-For each task:
-
-### 2a — Infer the model tier (OBRA-style, at dispatch)
-Use the task's `complexity` signal plus your read of the task as inputs, but **you decide at dispatch**. Rubric:
-- `mechanical` and fully specified → **haiku**. Boilerplate, wiring, CRUD, format changes.
-- `standard` → **sonnet**. Ordinary implementation with local decisions.
-- `novel`, security-sensitive, or irreversible → **opus**. Architecture, auth, money, data migrations.
-- When uncertain between two tiers, pick the cheaper one and let the subagent escalate (Step 2c). A cheap-first attempt that escalates is usually cheaper than defaulting high.
-
-### 2b — Dispatch the implementation subagent
-Before dispatching, call `get_impact_radius_tool` on the task's files and include the affected callers/dependents/tests in the subagent's context, so it can't break a caller it never read. (Skip if the graph is absent.)
-
-Spawn a fresh subagent (Task tool) at the chosen model with **only**: the feature doc, this one task (purpose/files/tests), and the relevant test file(s). Not the whole plan, not sibling tasks. Instruct it to follow TDD strictly: write/confirm the failing test (RED), then minimal code to pass (GREEN). Tests are never modified to pass — only implementation.
-
-### 2c — Out-of-depth signal
-Instruct every subagent: if the task is underspecified, contradicts the doc, or needs a decision above its pay grade, **stop and report the specific blocker** rather than guessing. On that signal, you (orchestrator) resolve it — re-dispatch at a higher tier, refine the task, or ask the user. Do not let a cheap subagent invent architecture.
-
-### 2d — Green gate (5-iteration ceiling)
-After the subagent returns, run the task's tests + typecheck.
-- All green → proceed to review (Step 3).
-- Failing → the subagent iterates. Each iteration is **mandatory-diagnosis-first**:
-  > Iteration N — exact error/file/line · which assumption was wrong · the ONE targeted fix
-  Fix implementation only. Never edit tests to pass.
-- **On the 5th failed iteration: STOP. Do not attempt a 6th.** Dispatch a fresh subagent that follows the existing `agent-skills:debugging-and-error-recovery` skill, passing it the task, the test, and the full iteration history. Its job is root-cause analysis, not more guessing — it returns either a diagnosed fix or a precise statement of why the task is blocked. Integrate its finding; if still blocked, surface to the user with its report. (No custom debugger — reuse the skill that already exists.)
-  - **Graph-assisted localization (if present):** the `debugging-and-error-recovery` subagent uses the graph to localize the fault — `get_impact_radius_tool` on the failing files, `query_graph_tool` (`callers_of` / `callees_of`) to trace the call chain, and `get_affected_flows_tool` for the broken execution path. This is the structural backbone CRG's `debug-issue` skill provides; keep `debugging-and-error-recovery` as the orchestrating skill — it *consults* the graph rather than deferring to a separate debug flow. Never dispatch both.
-
-## Step 3 — Per-task compliance sanity (light)
-After a task's green gate passes, run a **light** spec-compliance check in a fresh subagent: did this task implement its slice of the doc's Business Rules and Edge Cases? This is a fast sanity pass to catch a missed requirement while context is fresh — not the full review. Blocking miss → return to step 2b. (The authoritative, multi-axis review is `/review`, run at feature completion in Step 5 — `/build` does not own review logic.)
-
-Never let the implementing subagent check its own work; the sanity pass is a fresh subagent.
-
-## Step 4 — Integration gate
-After all layers complete, verify real behavior, not just green tests:
-- backend → real HTTP call, response shape matches the doc's API section
-- frontend → load it, check console + network
-- db → query directly, confirm the model matches
-- tooling → run against a real scenario
-
-Ownership default: "my code is wrong until proven otherwise" — before blaming an external cause, run a minimal probe and state a falsifiable hypothesis.
-
-## Step 5 — Finish
-After all layers are green, run the full review: invoke the `/review` flow on the feature (spec-compliance + quality + security + performance). Do not declare the feature done until `/review` passes (blocking findings resolved).
-
-Then update doc frontmatter (`status: complete` if shipping-ready, else `in_progress`; `phase: build`; `last_synced` today). Offer: commit & merge / commit only / leave for manual. Suggest the lifecycle tail: `/test` for holistic verification, `/digest <id>` to capture learnings, and `/code-simplify` + `/ship` at milestone.
-
-Before dispatching any task in Step 2, read `.cairn/.startup.md` (if present) for project orientation and `.cairn/learnings.md` (if present), surfacing any rules whose TAGS match this feature — prior root causes belong in context before the subagents start. (These are read at entry, not auto-injected at session start.)
-
-## Anti-rationalization
-- "I'll just implement this task myself instead of dispatching" → you're the orchestrator. Implementing in the main context pollutes it and defeats the isolation that makes SDD work. Dispatch.
-- "Tests are failing but the code looks right, I'll tweak the test" → forbidden. Tests are the spec made executable. Fix the implementation or escalate via the out-of-depth signal.
-- "5 iterations is close, one more will do it" → no. The 5th failure means the subagent lacks the root cause. More iterations burn tokens on the same wrong model. Hand to a fresh subagent running `debugging-and-error-recovery`.
-- "The implementer can review its own diff, it knows the context" → that context is exactly the bias. The per-task sanity pass and the full `/review` are both fresh subagents.
+## Finish
+Integration gate — real HTTP/DB/browser/CLI behavior, not just green tests. Then run the **/review** flow; don't declare done until it passes. Update feature frontmatter `status: in_progress` (NOT complete), `phase: build`, `last_synced` today. (.startup.md is derived — `/status` rebuilds it.)

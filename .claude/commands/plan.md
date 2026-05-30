@@ -1,80 +1,23 @@
 ---
-description: Break a Cairn feature doc into subagent-ownable tasks with a file-declaration gate. Run after /spec, before /build.
+description: Decompose a .cairn feature doc into tasks. Delegates to planning-and-task-breakdown; persists the skill's plan + checklist into the .cairn lifecycle. Run after /spec, before /build.
 argument-hint: <feature-id, e.g. 02 or 02-user-auth>
 ---
 
-# /plan — Task Decomposition
+# /plan — Plan phase
 
-You are running Cairn's **plan** phase. Input is a feature doc; output is an ordered task list that `/build` dispatches to subagents. Plan quality is the lever that lets `/build` use cheap models — invest here.
+Orchestration only. `planning-and-task-breakdown` does the decomposition; this command feeds it the feature doc and persists its output to the `.cairn` lifecycle. Do not restate or override the skill's method here.
 
-## Inputs
-- `$ARGUMENTS` — a feature id (`02` or `02-user-auth`).
+## Wire-up
+1. Resolve the doc: glob `.cairn/docs/<id>*.md`. None → tell the user to run `/spec` first and stop.
+2. Read it fully — frontmatter (`source_files`, `routes`, `models`, `depends_on`) plus Business Rules and Edge Cases are the decomposition source.
+3. Read tag-matched `.cairn/learnings.md` if present.
 
-## Step 0 — Load
-1. Resolve the doc: glob `.cairn/docs/<id>*.md`. If none, tell the user to run `/spec` first and stop.
-2. Read the doc fully. The frontmatter (`source_files`, `routes`, `models`, `test_files`, `depends_on`) and the Business Rules / Edge Cases sections are your decomposition source.
+## Delegate
+**Load and follow the `planning-and-task-breakdown` skill.** It owns the entire process: read-only plan mode, the dependency graph, **vertical slicing (one complete path per task — not horizontal layers)**, tasks with acceptance criteria and verification steps, the task-sizing table, and checkpoints between phases. Follow the skill; the command adds nothing to its method.
 
-## Step 1 — Decompose into units
-Apply unit decomposition (OBRA's rule): each task is **one clear purpose, a well-defined interface, independently testable**. Test: can someone understand what a unit does without reading its internals? If not, split it.
+## Cairn persistence (all this command contributes)
+Persist the skill's output to `.cairn/plans/<id>.md`: its plan plus the **checkbox task list** it produces — one `- [ ]` per task carrying that task's acceptance criteria and verify command. This is the skill's task list, kept in the `.cairn` lifecycle so `/build` checks each box (`- [x]`) as its green gate passes. For each task also record `depends_on` and a parallel-safe hint (which tasks declare no overlapping files) — an annotation for `/build`'s dispatcher, not a re-layering of the plan.
 
-For each task capture:
-- **id** — `T1`, `T2`, … in dependency order
-- **purpose** — one line
-- **files** — exact paths this task will create or modify (the file-declaration gate depends on this being precise)
-- **tests** — which test file(s) prove this task; what behaviors they assert
-- **depends_on** — task ids that must complete first
-- **layer** — tasks with no unmet dependency and no file overlap share a layer and may run as parallel subagents
-- **complexity** — `mechanical` | `standard` | `novel`. This is a *signal* for `/build`'s model inference, not a binding tag. Guidance: mechanical = fully specified, no design decisions (boilerplate, wiring, simple CRUD). standard = ordinary implementation with local decisions. novel = architectural ambiguity, security-sensitive, or irreversible.
+(If the code graph is present, per task: `get_impact_radius_tool` (file dependencies) + `get_affected_flows_tool` (runtime paths the task touches), and check the files against `get_hub_nodes_tool` / `get_bridge_nodes_tool` — a hub or bridge touch makes "parallel-safe" suspect even when no sibling declares the same file. Degrades gracefully if absent.)
 
-## Step 2 — File-declaration gate
-Build the file→task map. **No two tasks in the same layer may declare the same file.** If two parallel tasks need the same file, either serialize them (add a dependency) or split the file's concerns. Report the gate result explicitly.
-
-**Graph-aware gate (if the code graph is present).** For each task's declared `files`, call `get_impact_radius_tool` (dependency facts about specific files — not minimal-context). Then call `get_affected_flows_tool` to see which execution paths the task touches, and check the task's files against `get_hub_nodes_tool` / `get_bridge_nodes_tool`. **If a task touches a hub or a bridge, "parallel-safe" is suspect** — a widely-called function or a chokepoint isn't isolated even if no sibling task declares the same file. Serialize or split when the graph says a file is central. (Degrades gracefully if the graph is absent.)
-
-## Step 3 — Write the plan
-Write `.cairn/plans/<id>.md`:
-
-\`\`\`
----
-feature: <id>
-created: <today>
-layers: <count>
----
-
-## Layer 1  (parallel-safe)
-### T1 — <purpose>
-- files: src/a.ts, tests/a.test.ts
-- tests: a.test.ts asserts <behaviors>
-- depends_on: []
-- complexity: mechanical
-
-### T2 — <purpose>
-- files: src/b.ts
-- depends_on: []
-- complexity: standard
-
-## Layer 2
-### T3 — <purpose>
-- files: src/a.ts        # touches a file T1 owned → must be a later layer
-- depends_on: [T1]
-- complexity: novel
-\`\`\`
-
-## Step 4 — Confirm
-Print the layer/task tree, the file-declaration gate result, and the complexity mix. Then:
-
-\`\`\`
-🗂  Plan written: .cairn/plans/<id>.md
-   Tasks: N across L layers | parallel-safe in layer 1: X
-   File-declaration gate: PASS
-   Complexity: <a mechanical, b standard, c novel>
-
-Next: /build <id>
-\`\`\`
-
-Update the feature doc frontmatter: `phase: plan`.
-
-## Anti-rationalization
-- "These two tasks are related, I'll merge them into one big task" → big tasks force expensive models and defeat the cheap-model dispatch. Keep units small and single-purpose.
-- "I'll let the files sort themselves out during build" → the file-declaration gate is what makes parallel subagents safe. Declare files precisely now or parallelism corrupts state later.
-- "Everything is complexity: novel to be safe" → over-tagging novel wastes money on Opus. Tag honestly; mechanical tasks on Haiku is the whole point.
+Set the feature doc frontmatter `phase: plan`. Status stays `draft` — `/build` moves it to `in_progress`.
