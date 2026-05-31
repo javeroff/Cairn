@@ -17,8 +17,8 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Validate all skills
-        run: node scripts/validate-skills.js
+      - name: Validate skills, command refs, and doc links
+        run: node scripts/validate-skills.cjs
 
   validate:
     name: Validate plugin structure

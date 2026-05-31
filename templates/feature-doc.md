@@ -11,7 +11,7 @@ tags: []                # 4-8 domain keywords surfaced in .startup.md for prompt
 status: draft           # draft -> in_progress -> complete -> deprecated
 phase: spec             # last completed phase: spec | plan | build | review | ship
 last_synced: YYYY-MM-DD # drives drift detection
-cairn_version: 0.1.0
+cairn_version: 0.2.0
 known_issues: []
 ---
 

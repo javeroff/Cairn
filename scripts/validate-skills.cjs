@@ -64,6 +64,33 @@ const SKILL_REF_PATTERNS = [
   /→ `([a-z][a-z0-9-]+[a-z0-9])`/g,
 ];
 
+// ─── Reference-integrity config (commands + docs) ──────────────────────────────
+
+const ROOT         = path.resolve(__dirname, '..');
+const COMMANDS_DIR = path.join(ROOT, '.claude', 'commands');
+const AGENTS_DIR   = path.join(ROOT, 'agents');
+
+// Optional skills Cairn intentionally references but does not ship (code-review-graph).
+// Keep tight and documented — these are allowed dangling refs in commands.
+const EXTERNAL_SKILLS = new Set([
+  'explore-codebase',  // CRG: brownfield orientation at /spec
+  'review-changes',    // CRG
+  'debug-issue',       // CRG
+]);
+
+// Runtime artifacts Cairn writes into *target* projects — never present in this repo,
+// so a backticked mention of them is not a dead reference.
+const VIRTUAL_ARTIFACTS = new Set(['learnings.md', '.startup.md']);
+
+// Human-facing docs whose local links + file mentions should resolve.
+const DOC_FILES = [
+  path.join(ROOT, 'README.md'),
+  path.join(ROOT, 'CLAUDE.md'),
+  ...(fs.existsSync(path.join(ROOT, 'docs'))
+    ? fs.readdirSync(path.join(ROOT, 'docs')).filter(f => f.endsWith('.md')).map(f => path.join(ROOT, 'docs', f))
+    : []),
+];
+
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
@@ -102,6 +129,103 @@ function extractSkillReferences(content) {
     }
   }
   return refs;
+}
+
+/** Persona names from agents/ (filenames minus .md, excluding README). */
+function listPersonas() {
+  if (!fs.existsSync(AGENTS_DIR)) return [];
+  return fs.readdirSync(AGENTS_DIR)
+    .filter(f => f.endsWith('.md') && f.toLowerCase() !== 'readme.md')
+    .map(f => f.replace(/\.md$/, ''));
+}
+
+/** Every file basename in the repo (excluding .git / node_modules), for dead-reference checks. */
+function repoFileBasenames() {
+  const names = new Set();
+  (function walk(dir) {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (e.name === '.git' || e.name === 'node_modules') continue;
+      const full = path.join(dir, e.name);
+      if (e.isDirectory()) walk(full);
+      else names.add(e.name);
+    }
+  })(ROOT);
+  return names;
+}
+
+/**
+ * Commands must reference skills by BARE NAME (they install to ~/.claude/skills/,
+ * so a `skills/<name>/SKILL.md` path won't resolve), and every referenced skill /
+ * persona must actually exist. Both are errors — a command pointing at a missing
+ * skill is broken, not cosmetic.
+ */
+function validateCommandRefs(knownRefs) {
+  const out = [];
+  if (!fs.existsSync(COMMANDS_DIR)) return out;
+  for (const file of fs.readdirSync(COMMANDS_DIR).filter(f => f.endsWith('.md')).sort()) {
+    const errors  = [];
+    const content = fs.readFileSync(path.join(COMMANDS_DIR, file), 'utf8');
+
+    for (const p of new Set(content.match(/skills\/[a-z0-9-]+\/SKILL\.md/g) || [])) {
+      errors.push(`File-path skill reference \`${p}\` — reference skills by bare name (the path won't resolve once installed to ~/.claude/skills/)`);
+    }
+    for (const ref of extractSkillReferences(content)) {
+      if (!knownRefs.has(ref)) {
+        errors.push(`References \`${ref}\` as a skill/persona, but no such skill or persona exists`);
+      }
+    }
+    out.push({ file: `.claude/commands/${file}`, errors });
+  }
+  return out;
+}
+
+/**
+ * Human-facing docs: local markdown links must resolve (error), and backticked
+ * file mentions (`foo.md`, `scripts/bar.js`) must exist in the repo (warning) —
+ * catches dead references like a `CRG-INTEGRATION.md` that was never created.
+ * Placeholders (NN, <…>), runtime paths (.cairn/, ~/, ./) and known virtual
+ * artifacts are excluded.
+ */
+function validateDocRefs(repoNames) {
+  const out = [];
+  const linkRe      = /\[[^\]]*\]\(([^)]+)\)/g;
+  const fileTokenRe = /`([^`]+\.(?:md|js|sh|json))`/g;
+
+  for (const file of DOC_FILES) {
+    if (!fs.existsSync(file)) continue;
+    const content  = fs.readFileSync(file, 'utf8');
+    const errors   = [];
+    const warnings = [];
+
+    let m;
+    linkRe.lastIndex = 0;
+    while ((m = linkRe.exec(content)) !== null) {
+      const target = m[1].split(/[#?]/)[0].trim();
+      if (!target || /^(https?:|mailto:)/.test(target)) continue;
+      if (!fs.existsSync(path.resolve(path.dirname(file), target))) {
+        errors.push(`Broken local link: \`${target}\``);
+      }
+    }
+
+    // Backticked file mentions are checked only in the core project docs
+    // (README / CLAUDE). The docs/ setup guides legitimately name files in the
+    // *user's* repo (GEMINI.md, .github/…, rule files) that aren't ours.
+    const coreDoc = ['README.md', 'CLAUDE.md'].includes(path.basename(file));
+    fileTokenRe.lastIndex = 0;
+    while (coreDoc && (m = fileTokenRe.exec(content)) !== null) {
+      const tok = m[1];
+      if (/NN|<|>|\*/.test(tok)) continue;                      // placeholders
+      if (/^(\.cairn\/|~\/|\.\/|\.\.\/)/.test(tok)) continue;    // runtime / relative-runtime
+      const base = tok.split('/').pop();
+      if (VIRTUAL_ARTIFACTS.has(base)) continue;
+      if (!repoNames.has(base)) {
+        warnings.push(`Backticked file \`${tok}\` not found in repo — dead reference?`);
+      }
+    }
+
+    out.push({ file: path.relative(ROOT, file), errors, warnings });
+  }
+  return out;
 }
 
 // ─── Validator ───────────────────────────────────────────────────────────────
@@ -190,13 +314,15 @@ function main() {
     .filter(d => fs.statSync(path.join(SKILLS_DIR, d)).isDirectory())
     .sort();
 
-  const knownSkills = new Set(skillDirs);
+  // Recognized references = local skills + personas (agents/) + allowlisted
+  // external skills (CRG). Shared by the skill cross-ref check and the command check.
+  const recognized = new Set([...skillDirs, ...listPersonas(), ...EXTERNAL_SKILLS]);
 
   let totalErrors   = 0;
   let totalWarnings = 0;
 
   for (const dirName of skillDirs) {
-    const { errors, warnings, exempt } = validateSkill(dirName, knownSkills);
+    const { errors, warnings, exempt } = validateSkill(dirName, recognized);
     totalErrors   += errors.length;
     totalWarnings += warnings.length;
 
@@ -211,8 +337,35 @@ function main() {
     }
   }
 
+  // ── Reference integrity: commands + human-facing docs ─────────────────────
+  const repoNames  = repoFileBasenames();
+  const cmdResults = validateCommandRefs(recognized);
+  const docResults = validateDocRefs(repoNames);
+
+  console.log('\nReference integrity (commands + docs):');
+  for (const { file, errors } of cmdResults) {
+    totalErrors += errors.length;
+    if (errors.length === 0) {
+      console.log(`  ✓  ${file}`);
+    } else {
+      console.log(`  ✗  ${file}`);
+      for (const msg of errors) console.log(`       ERROR: ${msg}`);
+    }
+  }
+  for (const { file, errors, warnings } of docResults) {
+    totalErrors   += errors.length;
+    totalWarnings += warnings.length;
+    if (errors.length === 0 && warnings.length === 0) {
+      console.log(`  ✓  ${file}`);
+    } else {
+      console.log(`  ${errors.length > 0 ? '✗ ' : '⚠ '} ${file}`);
+      for (const msg of errors)   console.log(`       ERROR: ${msg}`);
+      for (const msg of warnings) console.log(`       WARN:  ${msg}`);
+    }
+  }
+
   const status = totalErrors > 0 ? 'FAILED' : totalWarnings > 0 ? 'PASSED WITH WARNINGS' : 'PASSED';
-  console.log(`\n${skillDirs.length} skills checked — ${totalErrors} error(s), ${totalWarnings} warning(s) — ${status}`);
+  console.log(`\n${skillDirs.length} skills + ${cmdResults.length} commands + ${docResults.length} docs checked — ${totalErrors} error(s), ${totalWarnings} warning(s) — ${status}`);
 
   if (totalErrors > 0) process.exit(1);
 }

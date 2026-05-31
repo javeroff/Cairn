@@ -1,6 +1,6 @@
 {
   "name": "cairn",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Cairn — doc-first, subagent-driven engineering workflow for Claude Code. Layered on the agent-skills library + an SDD execution engine + a documentation/learnings persistence layer.",
   "type": "module",
   "bin": {
@@ -28,6 +28,7 @@
   ],
   "license": "MIT",
   "scripts": {
-    "test": "node --test"
+    "test": "node --test",
+    "validate": "node scripts/validate-skills.cjs"
   }
 }
